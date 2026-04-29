@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quant-toolkit"
+version = "0.1.0"
+description = "Lightweight quantitative finance utility package."
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [
+    { name = "Phil Xu", email = "tian.xu24@imperial.ac.uk" }
+]
+keywords = ["quant", "finance", "performance", "risk", "data"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "License :: Other/Proprietary License",
+    "Operating System :: OS Independent"
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = []
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["quant_toolkit*"]
+exclude = ["tests*"]
