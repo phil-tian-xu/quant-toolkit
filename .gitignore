@@ -1,6 +1,9 @@
-data
+data/*
+!data/__init__.py
 
-*.toml
+results/*
+!results/__init__.py
+
 uv.lock
 
 /.venv
