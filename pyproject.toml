@@ -18,7 +18,11 @@ classifiers = [
     "License :: Other/Proprietary License",
     "Operating System :: OS Independent"
 ]
-dependencies = []
+dependencies = [
+    "numpy",
+    "pandas",
+    "QuantLib",
+]
 
 [project.optional-dependencies]
 dev = []
