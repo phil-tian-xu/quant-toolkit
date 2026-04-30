@@ -1,0 +1,1 @@
+PACKAGE_PREFIX = "[quant-toolkit]"

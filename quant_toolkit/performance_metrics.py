@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 from .data_download import get_calendar
+from .constants import PACKAGE_PREFIX
 
 
 def calculate_performance_metrics(
@@ -90,7 +91,7 @@ def _to_dataframe(input_data) -> pd.DataFrame:
     elif isinstance(input_data, pd.DataFrame):
         return input_data.copy()
     else:
-        raise TypeError("input_data must be a pandas Series or DataFrame.")
+        raise TypeError(f"{PACKAGE_PREFIX} input_data must be a pandas Series or DataFrame.")
 
 
 def _slice_by_date(input_data, start, end):
@@ -126,9 +127,9 @@ def _prepare_actual_calendar_data(input_data, exchange):
 
     """
     if not exchange:
-        raise ValueError("exchange must be provided when annualized_factor='actual'.")
+        raise ValueError(f"{PACKAGE_PREFIX} exchange must be provided when annualized_factor='actual'.")
     if input_data.empty:
-        raise ValueError("input_data is empty.")
+        raise ValueError(f"{PACKAGE_PREFIX} input_data is empty.")
     
     start_date = input_data.index[0]
     end_date = input_data.index[-1]
@@ -169,7 +170,7 @@ def _get_annual_trading_days(start_date, end_date, exchange):
     )
 
     if len(trading_calendar) == 0:
-        raise ValueError("No trading days found for the given date range and exchange.")
+        raise ValueError(f"{PACKAGE_PREFIX} No trading days found for the given date range and exchange.")
     
     start_year = trading_calendar[0].year
     end_year = trading_calendar[-1].year
@@ -193,12 +194,12 @@ def _resolve_standard_annualized_factor(frequency, annualized_factor):
     """
     if isinstance(annualized_factor, (int, float)):
         if annualized_factor <= 0:
-            raise ValueError("annualized_factor must be positive.")
+            raise ValueError(f"{PACKAGE_PREFIX} annualized_factor must be positive.")
         return annualized_factor
     
     if annualized_factor != "default":
         raise ValueError(
-            "annualized_factor must be a positive number, 'default', or 'actual'."
+            f"{PACKAGE_PREFIX} annualized_factor must be a positive number, 'default', or 'actual'."
         )
     
     frequency = frequency.upper().strip()
@@ -212,7 +213,7 @@ def _resolve_standard_annualized_factor(frequency, annualized_factor):
     if frequency not in frequency_map:
         supported = ", ".join(frequency_map.keys())
         raise ValueError(
-            f"Unsupported frequency: {frequency}. Supported frequencies: {supported}."
+            f"{PACKAGE_PREFIX} Unsupported frequency: {frequency}. Supported frequencies: {supported}."
         )
 
     return frequency_map[frequency]
@@ -233,10 +234,10 @@ def _compute_performance_metrics(input_data, annualized_factor, rf=0.0):
         ValueError: If input_data is empty or contains fewer than two rows.
     """
     if input_data.empty:
-        raise ValueError("input_data is empty.")
+        raise ValueError(f"{PACKAGE_PREFIX} input_data is empty.")
     
     if input_data.shape[0] < 2:
-        raise ValueError("input_data must contain at least two observations.")
+        raise ValueError(f"{PACKAGE_PREFIX} input_data must contain at least two observations.")
     
     rf_per_period = (1 + rf) ** (1 / annualized_factor) - 1
     returns = input_data.pct_change().dropna(how="all")
