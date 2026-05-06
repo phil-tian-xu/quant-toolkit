@@ -1,13 +1,13 @@
-from .constants import PACKAGE_PREFIX
+from quant_toolkit.constants import PACKAGE_PREFIX
 from datetime import date, datetime
 
-import Quantlib as ql
+import QuantLib as ql
 
 
 def get_calendar(
     exchange,
-    start_date="1900-01-01",
-    end_date="2100-01-01",
+    start_date="1901-01-01",
+    end_date="2199-01-01",
     calendar_type=str,
 ):
     """Get valid trading days for a supported exchange calendar.
@@ -114,4 +114,14 @@ def _to_py_date(value):
         return datetime.fromisoformat(value).date()
     else:
         raise TypeError(f"{PACKAGE_PREFIX} Date input must be str, date, or datetime.")
+
+
+if __name__ == "__main__":  # For test
+    test_calendar = get_calendar(
+        exchange="NYSE",
+        start_date="1999-01-01",
+        end_date="2000-01-01",
+        calendar_type=str,
+    )
+    print(test_calendar)
 

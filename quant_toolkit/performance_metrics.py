@@ -1,8 +1,8 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from .data_download import get_calendar
-from .constants import PACKAGE_PREFIX
+from quant_toolkit.data_download import get_calendar
+from quant_toolkit.constants import PACKAGE_PREFIX
 
 
 def calculate_performance_metrics(
