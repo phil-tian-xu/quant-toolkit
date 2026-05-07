@@ -237,7 +237,7 @@ def _compute_performance_metrics(input_data, annualized_factor, rf=0.0):
         raise ValueError(f"{PACKAGE_PREFIX} input_data is empty.")
     
     if input_data.shape[0] < 2:
-        raise ValueError(f"{PACKAGE_PREFIX} input_data must contain at least two observations.")
+        raise ValueError(f"{PACKAGE_PREFIX} input_data must contain at least two observations. Data: {input_data}")
     
     rf_per_period = (1 + rf) ** (1 / annualized_factor) - 1
     returns = input_data.pct_change().dropna(how="all")
@@ -278,3 +278,7 @@ def _format_performance_metrics(metrics):
     return
 
 
+if __name__ == "__main__":  # For test
+    print("Running main block")
+    test_data = pd.DataFrame({"A": [100, 110, 121]}, index=["2024-01-03", "2024-01-04", "2024-01-05"])
+    calculate_performance_metrics(test_data)
