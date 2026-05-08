@@ -42,7 +42,17 @@ def calculate_performance_metrics(
         pd.DataFrame or tuple: Performance metrics table. 
             If is_reformat is True, returns both the raw metrics table and the formatted metrics table.
     """
-    _validate_performance_metric_inputs()
+    _validate_performance_metric_inputs(
+        input_data=input_data,
+        start=start,
+        end=end,
+        frequency=frequency,
+        annualized_factor=annualized_factor,
+        exchange=exchange,
+        is_reformat=is_reformat,
+        rf=rf,
+    )
+
     data = _to_dataframe(input_data)
     data = _slice_by_date(data, start, end)
 
@@ -67,13 +77,141 @@ def calculate_performance_metrics(
     return metrics
 
 
-def _validate_performance_metric_inputs():
+def _validate_performance_metric_inputs(
+    input_data,
+    start,
+    end,
+    frequency,
+    annualized_factor,
+    exchange,
+    is_reformat,
+    rf,
+):
     """Validate inputs for performance metric calculation.
 
     This function is reserved for basic validation of user-facing arguments
     passed into calculate_performance_metrics.
     """
-    pass
+    ##################
+    # Allowed Params #
+    ##################
+    supported_frequencies = {"D", "W", "M", "Q"}
+
+    #####################
+    # Input Data Checks #
+    #####################
+    if not isinstance(input_data, (pd.Series, pd.DataFrame)):
+        raise TypeError(f"{PACKAGE_PREFIX} input_data must be a pandas Series or DataFrame.")
+
+    data = _to_dataframe(input_data)
+    if data.empty:
+        raise ValueError(f"{PACKAGE_PREFIX} input_data is empty.")
+
+    if data.shape[0] < 2:
+        raise ValueError(
+            f"{PACKAGE_PREFIX} input_data must contain at least two observations. Data: {data}"
+        )
+    
+    if data.shape[1] == 0:
+        raise ValueError(f"{PACKAGE_PREFIX} input_data must contain at least one column.")
+
+    if data.columns.has_duplicates:
+        raise ValueError(f"{PACKAGE_PREFIX} input_data columns must be unique.")
+
+    non_numeric_columns = data.select_dtypes(exclude=[np.number]).columns.tolist()
+    if non_numeric_columns:
+        raise TypeError(
+            f"{PACKAGE_PREFIX} input_data must contain only numeric values. "
+            f"Non-numeric columns: {non_numeric_columns}."
+        )
+
+    if not np.isfinite(data.to_numpy(dtype=float)).all():
+        raise ValueError(f"{PACKAGE_PREFIX} input_data must contain only finite numeric values.")
+
+    ###############
+    # Date Checks #
+    ###############
+    try:
+        start_date = pd.to_datetime(start)
+        end_date = pd.to_datetime(end)
+    except Exception as exc:
+        raise TypeError(
+            f"{PACKAGE_PREFIX} start and end must be date-like values."
+        ) from exc
+
+    if pd.isna(start_date) or pd.isna(end_date):
+        raise ValueError(f"{PACKAGE_PREFIX} start and end must not be NaT.")
+
+    if start_date > end_date:
+        raise ValueError(f"{PACKAGE_PREFIX} start must be earlier than or equal to end.")
+
+    try:
+        pd.to_datetime(data.index)
+    except Exception as exc:
+        raise TypeError(
+            f"{PACKAGE_PREFIX} input_data index must be date-like."
+        ) from exc
+
+    ####################
+    # Frequency Checks #
+    ####################
+    if not isinstance(frequency, str):
+        raise TypeError(f"{PACKAGE_PREFIX} frequency must be a string.")
+
+    frequency = frequency.upper().strip()
+    if frequency not in supported_frequencies:
+        supported = ", ".join(sorted(supported_frequencies))
+        raise ValueError(
+            f"{PACKAGE_PREFIX} Unsupported frequency: {frequency}. "
+            f"Supported frequencies: {supported}."
+        )
+    
+    if isinstance(annualized_factor, bool):
+        raise TypeError(
+            f"{PACKAGE_PREFIX} annualized_factor must be a positive number, 'default', or 'actual'."
+        )
+    
+    ############################
+    # Annualized Factor Checks #
+    ############################
+    if isinstance(annualized_factor, str):
+        annualized_factor = annualized_factor.lower().strip()
+        if annualized_factor not in {"default", "actual"}:
+            raise ValueError(
+                f"{PACKAGE_PREFIX} annualized_factor must be a positive number, 'default', or 'actual'."
+            )
+    elif isinstance(annualized_factor, (int, float)):
+        if not np.isfinite(annualized_factor) or annualized_factor <= 0:
+            raise ValueError(f"{PACKAGE_PREFIX} annualized_factor must be positive.")
+    else:
+        raise TypeError(
+            f"{PACKAGE_PREFIX} annualized_factor must be a positive number, 'default', or 'actual'."
+        )
+
+    if annualized_factor == "actual":
+        if not isinstance(exchange, str) or not exchange.strip():
+            raise ValueError(
+                f"{PACKAGE_PREFIX} exchange must be provided when annualized_factor='actual'."
+            )
+    elif exchange is not None and not isinstance(exchange, str):
+        raise TypeError(f"{PACKAGE_PREFIX} exchange must be a string or None.")
+    
+    ################
+    # Other Checks #
+    ################
+    if not isinstance(is_reformat, bool):
+        raise TypeError(f"{PACKAGE_PREFIX} is_reformat must be a boolean.")
+
+    if isinstance(rf, bool) or not isinstance(rf, (int, float)):
+        raise TypeError(f"{PACKAGE_PREFIX} rf must be a numeric annual risk-free rate.")
+
+    if not np.isfinite(rf):
+        raise ValueError(f"{PACKAGE_PREFIX} rf must be finite.")
+
+    if rf <= -1:
+        raise ValueError(f"{PACKAGE_PREFIX} rf must be greater than -1.")
+    
+    return
 
 
 def _to_dataframe(input_data) -> pd.DataFrame:
