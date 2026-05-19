@@ -31,3 +31,8 @@ dev = []
 where = ["."]
 include = ["quant_toolkit*"]
 exclude = ["tests*"]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: marks tests that connect to external services such as remote databases",
+]
