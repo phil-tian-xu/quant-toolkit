@@ -11,6 +11,22 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+from functools import wraps
+from sqlalchemy.exc import SQLAlchemyError
+
+
+def sql_safe_execution(func):
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        try:
+            self.connect()
+            return func(self, *args, **kwargs)
+        except SQLAlchemyError as err:
+            self._verbose(f"SQL execution failed in {func.__name__}: {err}")
+            raise
+
+    return wrapper
+
 
 @dataclass
 class DatabaseConfig:
@@ -65,6 +81,7 @@ class SQLDatabaseConnector:
     def __exit__(self, exc_type, exc_value, traceback) -> None:
         self.close()
 
+
     def is_connected(self) -> bool:
         return self._conn is not None and not self._conn.closed
 
@@ -115,6 +132,57 @@ class SQLDatabaseConnector:
             self._ssh_tunnel.stop()
             self._ssh_tunnel = None
             self._verbose("SSH tunnel stopped.")
+
+    @sql_safe_execution
+    def execute(
+            self,
+            sql_query: str,
+            params: dict = None,
+    ):
+        ...
+
+    @sql_safe_execution
+    def fetch_dataframe(
+            self,
+            sql_query: str,
+            params: dict = None,
+            index_col: str = None,
+    ) -> pd.DataFrame:
+        ...
+
+    @sql_safe_execution
+    def insert_dataframe(
+            self,
+            df: pd.DataFrame,
+            table_name: str,
+            if_exists: str = "append",
+            index: bool = False,
+            chunksize: int = 1000,
+    ):
+        ...
+
+    @sql_safe_execution
+    def table_exists(
+            self,
+            table_name: str,
+            schema_name: str = None,
+    ) -> bool:
+        ...
+
+    @sql_safe_execution
+    def show_columns(
+            self,
+            table_name: str,
+            schema_name: str = None,
+    ) -> list[str]:
+        ...
+
+    @sql_safe_execution
+    def list_tables(
+            self,
+            schema_name: str = None,
+    ) -> list[str]:
+        ...
 
     def _start_ssh_tunnel(self):
         if self.ssh_config is None:
@@ -281,23 +349,3 @@ class SQLDatabaseConnector:
             if not isinstance(self.ssh_config.local_bind_port, int):
                 raise TypeError("local_bind_port must be an integer.")
 
-if __name__ == "__main__":
-    from sqlalchemy import text
-
-    database_config = DatabaseConfig(
-        database_name="quant_datahub",
-        db_host="127.0.0.1",
-        db_port=3306,
-        db_user="root",
-        db_password="",
-        dialect="mysql",
-        driver="pymysql",
-    )
-
-    with SQLDatabaseConnector(
-        database_config=database_config,
-        ssh_config=None,
-        is_verbose=True,
-    ) as db:
-        result = db._conn.execute(text("SELECT 1;")).fetchone()
-        print(result)
