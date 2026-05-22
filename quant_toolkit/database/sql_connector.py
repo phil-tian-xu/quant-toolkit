@@ -169,7 +169,6 @@ class SQLDatabaseConnector:
             raise
 
     def _build_connection_url(self):
-        password = urllib.parse.quote_plus(self.database_config.db_password)
         if self.ssh_config is not None:
             if self._ssh_tunnel is None:
                 raise RuntimeError("SSH tunnel must be started before building connection URL.")
@@ -179,10 +178,15 @@ class SQLDatabaseConnector:
             host = self.database_config.db_host
             port = self.database_config.db_port
 
+        if self.database_config.db_password:
+            password = urllib.parse.quote_plus(self.database_config.db_password)
+            user_part = f"{self.database_config.db_user}:{password}"
+        else:
+            user_part = self.database_config.db_user
+
         return (
             f"{self.database_config.dialect}+{self.database_config.driver}://"
-            f"{self.database_config.db_user}:{password}"
-            f"@{host}:{port}/{self.database_config.database_name}"
+            f"{user_part}@{host}:{port}/{self.database_config.database_name}"
         )
 
     def _verbose(self, message: str):
@@ -210,8 +214,17 @@ class SQLDatabaseConnector:
         if not self.database_config.db_user:
             raise ValueError("db_user must be provided.")
 
-        if not self.database_config.db_password:
-            raise ValueError("db_password must be provided.")
+        if self.database_config.db_password is None:
+            self.database_config.db_password = ""
+            self._verbose(
+                "No database password provided. "
+                "This is allowed for passwordless local connections."
+            )
+        elif self.database_config.db_password == "":
+            self._verbose(
+                "Empty database password provided. "
+                "This is allowed for passwordless local connections."
+            )
 
         supported_dialects = {"mysql"}
         if self.database_config.dialect not in supported_dialects:
@@ -268,3 +281,23 @@ class SQLDatabaseConnector:
             if not isinstance(self.ssh_config.local_bind_port, int):
                 raise TypeError("local_bind_port must be an integer.")
 
+if __name__ == "__main__":
+    from sqlalchemy import text
+
+    database_config = DatabaseConfig(
+        database_name="quant_datahub",
+        db_host="127.0.0.1",
+        db_port=3306,
+        db_user="root",
+        db_password="",
+        dialect="mysql",
+        driver="pymysql",
+    )
+
+    with SQLDatabaseConnector(
+        database_config=database_config,
+        ssh_config=None,
+        is_verbose=True,
+    ) as db:
+        result = db._conn.execute(text("SELECT 1;")).fetchone()
+        print(result)
