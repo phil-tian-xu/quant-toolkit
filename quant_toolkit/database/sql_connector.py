@@ -5,7 +5,7 @@ from quant_toolkit.constants import PACKAGE_PREFIX
 from time import sleep
 import pandas as pd
 from sqlalchemy.engine import Engine
-from sqlalchemy import create_engine, exc
+from sqlalchemy import create_engine, exc, text
 from sshtunnel import SSHTunnelForwarder
 from pathlib import Path
 
@@ -139,7 +139,7 @@ class SQLDatabaseConnector:
             sql_query: str,
             params: dict = None,
     ):
-        ...
+        return self._conn.execute(text(sql_query), params or {})
 
     @sql_safe_execution
     def fetch_dataframe(
@@ -148,7 +148,7 @@ class SQLDatabaseConnector:
             params: dict = None,
             index_col: str = None,
     ) -> pd.DataFrame:
-        ...
+        return pd.read_sql(text(sql_query), self._conn, params=params, index_col=index_col)
 
     @sql_safe_execution
     def insert_dataframe(
@@ -159,7 +159,18 @@ class SQLDatabaseConnector:
             index: bool = False,
             chunksize: int = 1000,
     ):
-        ...
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError("df must be a pandas DataFrame.")
+
+        with self._engine.begin() as conn:
+            df.to_sql(
+                name=table_name,
+                con=conn,
+                if_exists=if_exists,
+                index=index,
+                method="multi",
+                chunksize=chunksize,
+            )
 
     @sql_safe_execution
     def table_exists(
@@ -167,7 +178,27 @@ class SQLDatabaseConnector:
             table_name: str,
             schema_name: str = None,
     ) -> bool:
-        ...
+        if not isinstance(table_name, str):
+            raise TypeError("table_name must be a string.")
+
+        if not table_name:
+            raise ValueError("table_name must be provided.")
+
+        if schema_name is None:
+            schema_name = self.database_config.database_name
+
+        query = """
+                SELECT TABLE_NAME
+                FROM INFORMATION_SCHEMA.TABLES
+                WHERE TABLE_SCHEMA = :schema_name
+                  AND TABLE_NAME = :table_name \
+                """
+
+        result = self._conn.execute(
+            text(query), {"schema_name": schema_name, "table_name": table_name,},
+        )
+
+        return result.fetchone() is not None
 
     @sql_safe_execution
     def show_columns(
@@ -175,14 +206,49 @@ class SQLDatabaseConnector:
             table_name: str,
             schema_name: str = None,
     ) -> list[str]:
-        ...
+        if not isinstance(table_name, str):
+            raise TypeError("table_name must be a string.")
+
+        if not table_name:
+            raise ValueError("table_name must be provided.")
+
+        if schema_name is None:
+            schema_name = self.database_config.database_name
+
+        query = """
+                SELECT COLUMN_NAME
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = :schema_name
+                  AND TABLE_NAME = :table_name
+                ORDER BY ORDINAL_POSITION \
+                """
+
+        result = self._conn.execute(
+            text(query), {"schema_name": schema_name, "table_name": table_name,},
+        )
+
+        return [row[0] for row in result.fetchall()]
 
     @sql_safe_execution
     def list_tables(
             self,
             schema_name: str = None,
     ) -> list[str]:
-        ...
+        if schema_name is None:
+            schema_name = self.database_config.database_name
+
+        query = """
+                SELECT TABLE_NAME
+                FROM INFORMATION_SCHEMA.TABLES
+                WHERE TABLE_SCHEMA = :schema_name
+                ORDER BY TABLE_NAME \
+                """
+
+        result = self._conn.execute(
+            text(query), {"schema_name": schema_name,},
+        )
+
+        return [row[0] for row in result.fetchall()]
 
     def _start_ssh_tunnel(self):
         if self.ssh_config is None:
