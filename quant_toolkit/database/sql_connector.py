@@ -138,8 +138,27 @@ class SQLDatabaseConnector:
             self,
             sql_query: str,
             params: dict = None,
+            commit: bool = False,
     ):
-        return self._conn.execute(text(sql_query), params or {})
+        result = self._conn.execute(text(sql_query), params or {})
+        if commit:
+            self._conn.commit()
+        return result
+
+    @sql_safe_execution
+    def commit(self):
+        self._conn.commit()
+        self._verbose("Transaction committed.")
+
+    @sql_safe_execution
+    def rollback(self):
+        self._conn.rollback()
+        self._verbose("Transaction rolled back.")
+
+    @sql_safe_execution
+    def ping(self) -> bool:
+        result = self._conn.execute(text("SELECT 1;")).fetchone()
+        return result is not None and result[0] == 1
 
     @sql_safe_execution
     def fetch_dataframe(
