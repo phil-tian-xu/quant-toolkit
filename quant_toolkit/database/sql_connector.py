@@ -3,8 +3,8 @@ import urllib.parse
 from dataclasses import dataclass
 from quant_toolkit.constants import PACKAGE_PREFIX
 from time import sleep
+from typing import Literal
 import pandas as pd
-from sqlalchemy.engine import Engine
 from sqlalchemy import create_engine, exc, text
 from sshtunnel import SSHTunnelForwarder
 from pathlib import Path
@@ -155,7 +155,7 @@ class SQLDatabaseConnector:
             self,
             df: pd.DataFrame,
             table_name: str,
-            if_exists: str = "append",
+            if_exists: Literal["fail", "replace", "append", "delete_rows"] = "append",
             index: bool = False,
             chunksize: int = 1000,
     ):
