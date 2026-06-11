@@ -28,7 +28,7 @@ def test_sql_database_connector_local_smoke():
         ssh_config=None,
         is_verbose=True,
     ) as db:
-        result = db._conn.execute(text("SELECT 1;")).fetchone()
+        result = db.execute("SELECT 1;").fetchone()
 
     assert result[0] == 1
 
