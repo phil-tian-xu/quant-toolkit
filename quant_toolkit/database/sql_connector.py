@@ -53,8 +53,8 @@ class SSHConfig:
 
 
 class SQLDatabaseConnector:
-    verbose_prefix = f"{PACKAGE_PREFIX} SQL Connector Info: "
-    error_prefix = f"{PACKAGE_PREFIX} SQL Connector Error: "
+    verbose_prefix = f"{PACKAGE_PREFIX} SQL Connector Info:"
+    error_prefix = f"{PACKAGE_PREFIX} SQL Connector Error:"
 
     def __init__(
         self,
