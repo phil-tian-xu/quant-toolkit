@@ -53,7 +53,8 @@ class SSHConfig:
 
 
 class SQLDatabaseConnector:
-    verbose_prefix = f"{PACKAGE_PREFIX} SQL Database Connector Info: "
+    verbose_prefix = f"{PACKAGE_PREFIX} SQL Connector Info: "
+    error_prefix = f"{PACKAGE_PREFIX} SQL Connector Error: "
 
     def __init__(
         self,
@@ -179,7 +180,7 @@ class SQLDatabaseConnector:
             chunksize: int = 1000,
     ):
         if not isinstance(df, pd.DataFrame):
-            raise TypeError("df must be a pandas DataFrame.")
+            raise TypeError(f"{self.error_prefix} df must be a pandas DataFrame.")
 
         with self._engine.begin() as conn:
             df.to_sql(
@@ -198,10 +199,10 @@ class SQLDatabaseConnector:
             schema_name: str = None,
     ) -> bool:
         if not isinstance(table_name, str):
-            raise TypeError("table_name must be a string.")
+            raise TypeError(f"{self.error_prefix} table_name must be a string.")
 
         if not table_name:
-            raise ValueError("table_name must be provided.")
+            raise ValueError(f"{self.error_prefix} table_name must be provided.")
 
         if schema_name is None:
             schema_name = self.database_config.database_name
@@ -226,10 +227,10 @@ class SQLDatabaseConnector:
             schema_name: str = None,
     ) -> list[str]:
         if not isinstance(table_name, str):
-            raise TypeError("table_name must be a string.")
+            raise TypeError(f"{self.error_prefix} table_name must be a string.")
 
         if not table_name:
-            raise ValueError("table_name must be provided.")
+            raise ValueError(f"{self.error_prefix} table_name must be provided.")
 
         if schema_name is None:
             schema_name = self.database_config.database_name
@@ -304,7 +305,9 @@ class SQLDatabaseConnector:
         elif self.ssh_config.ssh_auth_method == "password":
             ssh_kwargs["ssh_password"] = self.ssh_config.ssh_password
         else:
-            raise ValueError()
+            raise ValueError(
+                f"{self.error_prefix} Unsupported SSH auth method: {self.ssh_config.ssh_auth_method}."
+            )
 
         self._ssh_tunnel = SSHTunnelForwarder(
             (self.ssh_config.ssh_host, self.ssh_config.ssh_port),
@@ -324,7 +327,7 @@ class SQLDatabaseConnector:
     def _build_connection_url(self):
         if self.ssh_config is not None:
             if self._ssh_tunnel is None:
-                raise RuntimeError("SSH tunnel must be started before building connection URL.")
+                raise RuntimeError(f"{self.error_prefix} SSH tunnel must be started before building connection URL.")
             host = self.ssh_config.local_bind_host
             port = self._ssh_tunnel.local_bind_port
         else:
@@ -350,22 +353,22 @@ class SQLDatabaseConnector:
 
     def _validate_config(self):
         if not isinstance(self.database_config, DatabaseConfig):
-            raise TypeError("database_config must be a DatabaseConfig instance.")
+            raise TypeError(f"{self.error_prefix} database_config must be a DatabaseConfig instance.")
 
         if self.ssh_config is not None and not isinstance(self.ssh_config, SSHConfig):
-            raise TypeError("ssh_config must be an SSHConfig instance or None.")
+            raise TypeError(f"{self.error_prefix} ssh_config must be an SSHConfig instance or None.")
 
         if not self.database_config.database_name:
-            raise ValueError("database_name must be provided.")
+            raise ValueError(f"{self.error_prefix} database_name must be provided.")
 
         if not self.database_config.db_host:
-            raise ValueError("db_host must be provided.")
+            raise ValueError(f"{self.error_prefix} db_host must be provided.")
 
         if not isinstance(self.database_config.db_port, int):
-            raise TypeError("db_port must be an integer.")
+            raise TypeError(f"{self.error_prefix} db_port must be an integer.")
 
         if not self.database_config.db_user:
-            raise ValueError("db_user must be provided.")
+            raise ValueError(f"{self.error_prefix} db_user must be provided.")
 
         if self.database_config.db_password is None:
             self.database_config.db_password = ""
@@ -382,6 +385,7 @@ class SQLDatabaseConnector:
         supported_dialects = {"mysql"}
         if self.database_config.dialect not in supported_dialects:
             raise ValueError(
+                f"{self.error_prefix} "
                 f"Unsupported database dialect: {self.database_config.dialect}. "
                 f"Supported dialects: {supported_dialects}."
             )
@@ -389,6 +393,7 @@ class SQLDatabaseConnector:
         supported_drivers = {"pymysql", "mysqlconnector"}
         if self.database_config.driver not in supported_drivers:
             raise ValueError(
+                f"{self.error_prefix} "
                 f"Unsupported database driver: {self.database_config.driver}. "
                 f"Supported drivers: {supported_drivers}."
             )
@@ -397,17 +402,18 @@ class SQLDatabaseConnector:
             return
         else:
             if not self.ssh_config.ssh_host:
-                raise ValueError("ssh_host must be provided when ssh_config is used.")
+                raise ValueError(f"{self.error_prefix} ssh_host must be provided when ssh_config is used.")
 
             if not self.ssh_config.ssh_user:
-                raise ValueError("ssh_user must be provided when ssh_config is used.")
+                raise ValueError(f"{self.error_prefix} ssh_user must be provided when ssh_config is used.")
 
             if not isinstance(self.ssh_config.ssh_port, int):
-                raise TypeError("ssh_port must be an integer.")
+                raise TypeError(f"{self.error_prefix} ssh_port must be an integer.")
 
             supported_ssh_auth_methods = {"ssh_key_pairs", "password"}
             if self.ssh_config.ssh_auth_method not in supported_ssh_auth_methods:
                 raise ValueError(
+                    f"{self.error_prefix} "
                     f"Unsupported SSH auth method: {self.ssh_config.ssh_auth_method}. "
                     f"Supported methods: {supported_ssh_auth_methods}."
                 )
@@ -415,12 +421,12 @@ class SQLDatabaseConnector:
             if self.ssh_config.ssh_auth_method == "password":
                 if not self.ssh_config.ssh_password:
                     raise ValueError(
-                        "ssh_password must be provided when ssh_auth_method='password'."
+                        f"{self.error_prefix} ssh_password must be provided when ssh_auth_method='password'."
                     )
 
             if self.ssh_config.ssh_auth_method == "ssh_key_pairs":
                 if not self.ssh_config.ssh_key_path:
-                    raise ValueError("ssh_key_path must be provided when ssh_auth_method='ssh_key_pairs'.")
+                    raise ValueError(f"{self.error_prefix} ssh_key_path must be provided when ssh_auth_method='ssh_key_pairs'.")
 
                 if self.ssh_config.ssh_key_path == "~/.ssh/id_rsa":
                     self._verbose(
@@ -429,8 +435,8 @@ class SQLDatabaseConnector:
                     )
 
             if not self.ssh_config.local_bind_host:
-                raise ValueError("local_bind_host must be provided.")
+                raise ValueError(f"{self.error_prefix} local_bind_host must be provided.")
 
             if not isinstance(self.ssh_config.local_bind_port, int):
-                raise TypeError("local_bind_port must be an integer.")
+                raise TypeError(f"{self.error_prefix} local_bind_port must be an integer.")
 
