@@ -270,6 +270,93 @@ class SQLDatabaseConnector:
 
         return [row[0] for row in result.fetchall()]
 
+    @sql_safe_execution
+    def create_table(
+            self,
+            table_name: str,
+            columns_mapping: dict,
+            primary_keys: tuple[str, ...] | list[str] = None,
+            foreign_keys: list[dict] = None,
+            unique_keys: list[dict] = None,
+            indexes: list[dict] = None,
+            if_not_exists: bool = True,
+    ):
+        """Create a MySQL table from structured schema metadata."""
+        if not isinstance(table_name, str):
+            raise TypeError(f"{self.error_prefix} table_name must be a string.")
+
+        if not table_name:
+            raise ValueError(f"{self.error_prefix} table_name must be provided.")
+
+        if not isinstance(columns_mapping, dict):
+            raise TypeError(f"{self.error_prefix} columns_mapping must be a dict.")
+
+        if not columns_mapping:
+            raise ValueError(f"{self.error_prefix} columns_mapping cannot be empty.")
+
+        table_parts = []
+
+        for column_name, column_type in columns_mapping.items():
+            table_parts.append(f"{column_name} {column_type}")
+
+        if primary_keys:
+            primary_key_columns = ", ".join(primary_keys)
+            table_parts.append(f"PRIMARY KEY ({primary_key_columns})")
+
+        if foreign_keys:
+            for foreign_key in foreign_keys:
+                constraint_name = foreign_key.get("name")
+                columns = ", ".join(foreign_key["columns"])
+                ref_table = foreign_key["ref_table"]
+                ref_columns = ", ".join(foreign_key["ref_columns"])
+
+                constraint_prefix = (
+                    f"CONSTRAINT {constraint_name} "
+                    if constraint_name
+                    else ""
+                )
+
+                foreign_key_sql = (
+                    f"{constraint_prefix}"
+                    f"FOREIGN KEY ({columns}) "
+                    f"REFERENCES {ref_table}({ref_columns})"
+                )
+
+                if foreign_key.get("on_update"):
+                    foreign_key_sql += f" ON UPDATE {foreign_key['on_update']}"
+
+                if foreign_key.get("on_delete"):
+                    foreign_key_sql += f" ON DELETE {foreign_key['on_delete']}"
+
+                table_parts.append(foreign_key_sql)
+
+        if unique_keys:
+            for unique_key in unique_keys:
+                key_name = unique_key.get("name")
+                columns = ", ".join(unique_key["columns"])
+
+                if key_name:
+                    table_parts.append(f"UNIQUE KEY {key_name} ({columns})")
+                else:
+                    table_parts.append(f"UNIQUE ({columns})")
+
+        if indexes:
+            for index in indexes:
+                index_name = index["name"]
+                columns = ", ".join(index["columns"])
+                table_parts.append(f"INDEX {index_name} ({columns})")
+
+        create_clause = "CREATE TABLE IF NOT EXISTS" if if_not_exists else "CREATE TABLE"
+        table_body = ",\n    ".join(table_parts)
+
+        sql_query = f"""
+        {create_clause} {table_name} (
+            {table_body}
+        );
+        """
+
+        return self.execute(sql_query, commit=True)
+
     def _start_ssh_tunnel(self):
         if self.ssh_config is None:
             return
@@ -349,7 +436,7 @@ class SQLDatabaseConnector:
         logger.info(message)
 
         if self.is_verbose:
-            print(f"{self.verbose_prefix}{message}")
+            print(f"{self.verbose_prefix} {message}")
 
     def _validate_config(self):
         if not isinstance(self.database_config, DatabaseConfig):
