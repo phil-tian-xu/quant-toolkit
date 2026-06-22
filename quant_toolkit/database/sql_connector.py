@@ -357,6 +357,30 @@ class SQLDatabaseConnector:
 
         return self.execute(sql_query, commit=True)
 
+    @sql_safe_execution
+    def drop_table(
+            self,
+            table_name: str,
+            if_exists: bool = True,
+    ):
+        """Drop a database table."""
+
+        if not isinstance(table_name, str):
+            raise TypeError(f"{self.error_prefix} table_name must be a string.")
+        if not table_name:
+            raise ValueError(f"{self.error_prefix} table_name must be provided.")
+
+        if not self.table_exists(table_name):
+            self._verbose(f"Table does not exist, skip dropping: {table_name}")
+            return False
+
+        sql_query = f"DROP TABLE IF EXISTS {table_name};"
+        self.execute(sql_query, commit=True)
+        self._verbose(f"Dropped table: {table_name}")
+        return True
+
+
+
     def _start_ssh_tunnel(self):
         if self.ssh_config is None:
             return
