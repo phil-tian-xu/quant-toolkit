@@ -3,7 +3,6 @@ import urllib.parse
 from dataclasses import dataclass
 from quant_toolkit.constants import PACKAGE_PREFIX
 from time import sleep
-from typing import Literal
 import pandas as pd
 from sqlalchemy import create_engine, exc, text
 from sshtunnel import SSHTunnelForwarder
@@ -162,7 +161,7 @@ class SQLDatabaseConnector:
         return result is not None and result[0] == 1
 
     @sql_safe_execution
-    def fetch_dataframe(
+    def fetch_sql(
             self,
             sql_query: str,
             params: dict = None,
@@ -171,26 +170,180 @@ class SQLDatabaseConnector:
         return pd.read_sql(text(sql_query), self._conn, params=params, index_col=index_col)
 
     @sql_safe_execution
-    def insert_dataframe(
+    def fetch_table(
+        self,
+        table_name: str,
+        columns: list[str] | tuple[str, ...] | None = None,
+        where_clause: str | None = None,
+        params: dict | None = None,
+        index_col: str | None = None,
+    ):
+        """Fetch rows from a database table as a DataFrame.
+
+        This is a generic SQL helper for reading table data without writing raw
+        SELECT statements in caller code. It should support optional column
+        selection, an optional WHERE clause, query parameters, and an optional
+        DataFrame index column.
+        """
+        if not table_name:
+            raise ValueError(f"{self.error_prefix} table_name must be provided.")
+
+        if not isinstance(table_name, str):
+            raise TypeError(f"{self.error_prefix} table_name must be a string.")
+
+        if columns is None:
+            columns_sql = "*"
+        elif isinstance(columns, (list, tuple)) and len(columns) > 0:
+            columns_sql = ", ".join(columns)
+        else:
+            raise ValueError(
+                f"{self.error_prefix} columns must be a non-empty list/tuple or None."
+            )
+
+        sql_query = f"SELECT {columns_sql} FROM {table_name}"
+
+        if where_clause:
+            where_clause = where_clause.strip()
+            if where_clause.upper().startswith("WHERE "):
+                sql_query += f" {where_clause}"
+            else:
+                sql_query += f" WHERE {where_clause}"
+
+        return self.fetch_sql(
+            sql_query=sql_query,
+            params=params,
+            index_col=index_col,
+        )
+
+    @sql_safe_execution
+    def write_dataframe(
             self,
             df: pd.DataFrame,
             table_name: str,
-            if_exists: Literal["fail", "replace", "append", "delete_rows"] = "append",
+            mode: str = "append",
+            key_columns: list[str] | tuple[str, ...] = None,
+            update_columns: list[str] | tuple[str, ...] = None,
             index: bool = False,
             chunksize: int = 1000,
     ):
+        """Write a DataFrame to a database table.
+
+        Supported modes:
+            append: Insert rows into an existing table.
+            fail: Fail if the table already exists.
+            replace: Replace the table with the DataFrame.
+            upsert: Insert new rows and update existing rows on duplicate key.
+
+        DataFrame format:
+            Each DataFrame row represents one database row.
+            DataFrame columns should match the target table column names.
+            For mode="upsert", key_columns must be columns in df and should match
+            a PRIMARY KEY or UNIQUE KEY in the database table.
+            If index=True, the DataFrame index is reset and written as a column
+            before insertion/upsert.
+
+        Notes:
+            DataFrame columns are used directly as SQL column names. They should
+            already be valid column names in the target database table.
+
+            For mode="upsert", the returned value is the database affected row
+            count, not necessarily len(df). In MySQL, an updated row may count
+            differently from an inserted row depending on server/client settings.
+
+            If index=True, the DataFrame index is written as a column. For
+            mode="upsert", this is done by reset_index() before building the SQL.
+            If the index has no name, pandas may create a column named "index".
+        """
+
         if not isinstance(df, pd.DataFrame):
             raise TypeError(f"{self.error_prefix} df must be a pandas DataFrame.")
 
-        with self._engine.begin() as conn:
-            df.to_sql(
-                name=table_name,
-                con=conn,
-                if_exists=if_exists,
-                index=index,
-                method="multi",
-                chunksize=chunksize,
+        if not isinstance(table_name, str):
+            raise TypeError(f"{self.error_prefix} table_name must be a string.")
+
+        if not table_name:
+            raise ValueError(f"{self.error_prefix} table_name must be provided.")
+
+        mode = mode.lower().strip()
+        supported_modes = {"append", "fail", "replace", "upsert"}
+        if mode not in supported_modes:
+            raise ValueError(
+                f"{self.error_prefix} Unsupported write mode: {mode}. "
+                f"Supported modes: {supported_modes}."
             )
+
+        if df.empty:
+            self._verbose(f"No rows to write into {table_name}.")
+            return 0
+
+        if mode in {"append", "fail", "replace"}:
+            with self._engine.begin() as conn:
+                df.to_sql(
+                    name=table_name,
+                    con=conn,
+                    if_exists=mode,
+                    index=index,
+                    method="multi",
+                    chunksize=chunksize,
+                )
+            self._verbose(f"Wrote {len(df)} rows into {table_name} with mode={mode}.")
+            return len(df)
+        else:
+            if index:
+                df = df.reset_index()
+
+            if not isinstance(key_columns, (list, tuple)) or not key_columns:
+                raise ValueError(
+                    f"{self.error_prefix} key_columns must be provided when mode='upsert'."
+                )
+
+            missing_key_columns = [col for col in key_columns if col not in df.columns]
+            if missing_key_columns:
+                raise ValueError(
+                    f"{self.error_prefix} Missing key columns in DataFrame: {missing_key_columns}"
+                )
+
+            if update_columns is None:
+                update_columns = [col for col in df.columns if col not in key_columns]
+            elif not isinstance(update_columns, (list, tuple)):
+                raise TypeError(
+                    f"{self.error_prefix} update_columns must be a list, tuple, or None."
+                )
+            missing_update_columns = [col for col in update_columns if col not in df.columns]
+            if missing_update_columns:
+                raise ValueError(
+                    f"{self.error_prefix} Missing update columns in DataFrame: {missing_update_columns}"
+                )
+            insert_columns = list(df.columns)
+            columns_sql = ", ".join(insert_columns)
+            values_sql = ", ".join(f":{col}" for col in insert_columns)
+            if update_columns:
+                update_sql = ", ".join(
+                    f"{col} = VALUES({col})"
+                    for col in update_columns
+                )
+            else:
+                update_sql = ", ".join(
+                    f"{col} = {col}"
+                    for col in key_columns
+                )
+            sql_query = f"""
+                INSERT INTO {table_name} ({columns_sql})
+                VALUES ({values_sql})
+                ON DUPLICATE KEY UPDATE {update_sql}
+            """
+
+            records = df.to_dict(orient="records")
+            affected_rows = 0
+
+            for start in range(0, len(records), chunksize):
+                chunk = records[start:start + chunksize]
+                result = self._conn.execute(text(sql_query), chunk)
+                affected_rows += result.rowcount or 0
+
+            self._conn.commit()
+            self._verbose(f"Upserted {len(df)} rows into {table_name}.")
+            return affected_rows
 
     @sql_safe_execution
     def table_exists(
@@ -379,7 +532,31 @@ class SQLDatabaseConnector:
         self._verbose(f"Dropped table: {table_name}")
         return True
 
+    @sql_safe_execution
+    def delete_rows(
+        self,
+        table_name: str,
+        where_clause: str,
+        params: dict | None = None,
+    ):
+        """Delete rows from a table using an explicit WHERE clause.
 
+        This is a generic SQL helper for controlled row deletion. The caller
+        must provide a WHERE clause so accidental full-table deletes are avoided.
+        """
+        raise NotImplementedError
+
+    @sql_safe_execution
+    def truncate_table(
+        self,
+        table_name: str,
+    ):
+        """Remove all rows from a table using TRUNCATE TABLE.
+
+        This is a generic destructive SQL helper. It should be used only when
+        the caller intentionally wants to clear an entire table.
+        """
+        raise NotImplementedError
 
     def _start_ssh_tunnel(self):
         if self.ssh_config is None:
