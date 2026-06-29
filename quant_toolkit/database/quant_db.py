@@ -73,14 +73,56 @@ class QuantDatabaseInteractor(SQLDatabaseConnector):
             local_bind_port=login_info.get("local_bind_port", 0),
         )
 
-    def get_universe(self):
-        ...
+    def get_universe(
+        self,
+        universe_name: str | None = None,
+        source: str | None = None,
+        active_only: bool = True,
+    ):
+        """Return an instrument universe from the shared quant database.
 
-    def get_instrument_mapping(self):
-        ...
+        This method should load a reusable quant universe definition, optionally
+        filtered by universe name, source, and active status.
+        """
+        raise NotImplementedError
 
-    def select_time_series(self):
-        ...
+    def get_instrument_mapping(
+        self,
+        identifier_type: str | None = None,
+        source: str | None = None,
+    ):
+        """Return instrument identifier mappings from the shared quant database.
 
-    def select_metadata(self):
-        ...
+        This method represents shared quant-database semantics rather than a
+        project-specific datahub operation. It should provide mappings between
+        internal instrument IDs and vendor/source identifiers.
+        """
+        raise NotImplementedError
+
+    def select_time_series(
+        self,
+        instruments: list[int] | list[str] | None = None,
+        fields: list[str] | tuple[str, ...] | None = None,
+        source: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ):
+        """Select time-series data from the shared quant database.
+
+        This method should provide a common quant-database interface for reading
+        historical time-series data by instrument, field, source, and date range.
+        """
+        raise NotImplementedError
+
+    def select_metadata(
+        self,
+        instruments: list[int] | list[str] | None = None,
+        fields: list[str] | tuple[str, ...] | None = None,
+        source: str | None = None,
+    ):
+        """Select instrument metadata from the shared quant database.
+
+        This method should provide a common quant-database interface for reading
+        static/reference metadata for instruments.
+        """
+        raise NotImplementedError
