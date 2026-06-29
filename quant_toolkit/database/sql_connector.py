@@ -543,20 +543,80 @@ class SQLDatabaseConnector:
 
         This is a generic SQL helper for controlled row deletion. The caller
         must provide a WHERE clause so accidental full-table deletes are avoided.
+
+        Args:
+            table_name: Name of the table to delete rows from.
+            where_clause: SQL WHERE condition used to select rows for deletion.
+                It can be written with or without the leading "WHERE".
+            params: Optional SQL parameters used by the WHERE clause.
+
+        Returns:
+            int: Number of rows reported as deleted by the database.
+
+        Example:
+            delete_rows(
+                table_name="daily_price",
+                where_clause="trade_date < :cutoff_date",
+                params={"cutoff_date": "2020-01-01"},
+            )
+
+            This generates:
+                DELETE FROM daily_price WHERE trade_date < :cutoff_date
         """
-        raise NotImplementedError
+        if not table_name:
+            raise ValueError(f"{self.error_prefix} table_name must be provided.")
+
+        if not isinstance(table_name, str):
+            raise TypeError(f"{self.error_prefix} table_name must be a string.")
+
+        if not isinstance(where_clause, str):
+            raise TypeError(f"{self.error_prefix} where_clause must be a string.")
+
+        where_clause = where_clause.strip()
+        if not where_clause:
+            raise ValueError(
+                f"{self.error_prefix} where_clause must be provided."
+                f" If you want to remove all rows in a table, please use truncate_table method"
+            )
+
+        if where_clause.upper().startswith("WHERE "):
+            sql_query = f"DELETE FROM {table_name} {where_clause}"
+        else:
+            sql_query = f"DELETE FROM {table_name} WHERE {where_clause}"
+
+        result = self.execute(sql_query, params=params, commit=True)
+        deleted_rows = result.rowcount
+        self._verbose(f"Deleted {deleted_rows} rows from {table_name}.")
+        return deleted_rows
 
     @sql_safe_execution
     def truncate_table(
         self,
         table_name: str,
-    ):
+    ) -> bool:
         """Remove all rows from a table using TRUNCATE TABLE.
 
         This is a generic destructive SQL helper. It should be used only when
-        the caller intentionally wants to clear an entire table.
+        the caller intentionally wants to clear an entire table. The table
+        structure is kept, but all data rows are removed.
+
+        Args:
+            table_name: Name of the table to truncate.
+
+        Returns:
+            bool: True if the TRUNCATE TABLE statement is executed successfully.
         """
-        raise NotImplementedError
+        if not table_name:
+            raise ValueError(f"{self.error_prefix} table_name must be provided.")
+
+        if not isinstance(table_name, str):
+            raise TypeError(f"{self.error_prefix} table_name must be a string.")
+
+        sql_query = f"TRUNCATE TABLE {table_name};"
+        self.execute(sql_query, commit=True)
+
+        self._verbose(f"Truncated table: {table_name}.")
+        return True
 
     def _start_ssh_tunnel(self):
         if self.ssh_config is None:
