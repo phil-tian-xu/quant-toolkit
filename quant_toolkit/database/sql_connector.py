@@ -185,11 +185,11 @@ class SQLDatabaseConnector:
         selection, an optional WHERE clause, query parameters, and an optional
         DataFrame index column.
         """
-        if not table_name:
-            raise ValueError(f"{self.error_prefix} table_name must be provided.")
-
         if not isinstance(table_name, str):
             raise TypeError(f"{self.error_prefix} table_name must be a string.")
+
+        if not table_name:
+            raise ValueError(f"{self.error_prefix} table_name must be provided.")
 
         if columns is None:
             columns_sql = "*"
@@ -254,15 +254,20 @@ class SQLDatabaseConnector:
             mode="upsert", this is done by reset_index() before building the SQL.
             If the index has no name, pandas may create a column named "index".
         """
+        if not isinstance(table_name, str):
+            raise TypeError(f"{self.error_prefix} table_name must be a string.")
 
         if not isinstance(df, pd.DataFrame):
             raise TypeError(f"{self.error_prefix} df must be a pandas DataFrame.")
 
-        if not isinstance(table_name, str):
-            raise TypeError(f"{self.error_prefix} table_name must be a string.")
-
         if not table_name:
             raise ValueError(f"{self.error_prefix} table_name must be provided.")
+
+        if not isinstance(mode, str):
+            raise TypeError(f"{self.error_prefix} mode must be a string.")
+
+        if not isinstance(chunksize, int) or chunksize <= 0:
+            raise ValueError(f"{self.error_prefix} chunksize must be a positive integer.")
 
         mode = mode.lower().strip()
         supported_modes = {"append", "fail", "replace", "upsert"}
@@ -514,7 +519,6 @@ class SQLDatabaseConnector:
     def drop_table(
             self,
             table_name: str,
-            if_exists: bool = True,
     ):
         """Drop a database table."""
 
@@ -563,11 +567,11 @@ class SQLDatabaseConnector:
             This generates:
                 DELETE FROM daily_price WHERE trade_date < :cutoff_date
         """
-        if not table_name:
-            raise ValueError(f"{self.error_prefix} table_name must be provided.")
-
         if not isinstance(table_name, str):
             raise TypeError(f"{self.error_prefix} table_name must be a string.")
+
+        if not table_name:
+            raise ValueError(f"{self.error_prefix} table_name must be provided.")
 
         if not isinstance(where_clause, str):
             raise TypeError(f"{self.error_prefix} where_clause must be a string.")
@@ -606,11 +610,11 @@ class SQLDatabaseConnector:
         Returns:
             bool: True if the TRUNCATE TABLE statement is executed successfully.
         """
-        if not table_name:
-            raise ValueError(f"{self.error_prefix} table_name must be provided.")
-
         if not isinstance(table_name, str):
             raise TypeError(f"{self.error_prefix} table_name must be a string.")
+
+        if not table_name:
+            raise ValueError(f"{self.error_prefix} table_name must be provided.")
 
         sql_query = f"TRUNCATE TABLE {table_name};"
         self.execute(sql_query, commit=True)
